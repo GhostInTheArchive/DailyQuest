@@ -1,0 +1,10 @@
+{
+  "name": "DailyQuest",
+  "version_number": "1.0.0",
+  "website_url": "",
+  "description": "Daily quest system for V Rising with three rotating quest tiers, reward claiming, and optional gear repair.",
+  "dependencies": [
+    "BepInEx-BepInExPack_V_Rising-1.733.2",
+    "deca-VampireCommandFramework-0.10.4"
+  ]
+}
