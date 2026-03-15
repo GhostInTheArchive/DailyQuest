@@ -1,6 +1,6 @@
 {
   "name": "DailyQuest",
-  "version_number": "1.0.0",
+  "version_number": "1.0.2",
   "website_url": "https://github.com/delta663/DailyQuest",
   "description": "Daily quest system for V Rising with three rotating quest tiers, reward claiming, and optional gear repair.",
   "dependencies": [
