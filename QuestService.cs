@@ -292,7 +292,16 @@ internal static class QuestService
                 claimedAny = true;
 
                 if (_config.RepairOnClaim)
-                    Helper.RepairAmulet(characterEntity);
+                {
+                    try
+                    {
+                        Helper.RepairAmulet(characterEntity);
+                    }
+                    catch (Exception e)
+                    {
+                        Core.LogException(e);
+                    }
+                }
 
                 var q = GetQuestById_NoLock(st.EasyQuestId);
                 int need = Math.Max(0, q?.RequiredKills ?? 0);
@@ -306,7 +315,16 @@ internal static class QuestService
                 claimedAny = true;
 
                 if (_config.RepairOnClaim)
-                    Helper.RepairArmor(characterEntity);
+                {
+                    try
+                    {
+                        Helper.RepairArmor(characterEntity);
+                    }
+                    catch (Exception e)
+                    {
+                        Core.LogException(e);
+                    }
+                }
 
                 var q = GetQuestById_NoLock(st.MediumQuestId);
                 int need = Math.Max(0, q?.RequiredKills ?? 0);
@@ -320,7 +338,16 @@ internal static class QuestService
                 claimedAny = true;
 
                 if (_config.RepairOnClaim)
-                    Helper.RepairWeapon(characterEntity);
+                {
+                    try
+                    {
+                        Helper.RepairWeapon(characterEntity);
+                    }
+                    catch (Exception e)
+                    {
+                        Core.LogException(e);
+                    }
+                }
 
                 var q = GetQuestById_NoLock(st.HardQuestId);
                 int need = Math.Max(0, q?.RequiredKills ?? 0);
