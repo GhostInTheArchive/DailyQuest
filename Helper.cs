@@ -85,7 +85,12 @@ internal static partial class Helper
     public static void RepairWeapon(Entity character, bool repair = true)
     {
         if (!InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, character, out var inventory)) return;
-        if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inventory, out var buffer)) return;
+
+        var mapper = Core.Server.GetExistingSystemManaged<ServerScriptMapper>();
+        if (mapper == null) return;
+
+        var serverGameManager = mapper._ServerGameManager;
+        if (!serverGameManager.TryGetBuffer<InventoryBuffer>(inventory, out var buffer)) return;
 
         for (int i = 0; i < 8 && i < buffer.Length; i++)
         {
