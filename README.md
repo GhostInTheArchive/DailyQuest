@@ -74,7 +74,14 @@ This file defines:
 This file stores each player's daily quest assignment and progress.
 Do not edit `quest_player.json` unless you know exactly what you are doing.
 
-> **Notes**
+## Credits
+- **Objit** for the original code that inspired this mod.
+- **V Rising modding community**
+
+## License
+This project is licensed under the AGPL-3.0 license.
+
+## Notes
 > - This mod was first made for my own server and originally ran through KindredCommands. It has now been separated into a standalone mod so that everyone can use it.
 > - If you have any problems or run into bugs, please report them to me in the [V Rising Modding Community](https://discord.com/invite/QG2FmueAG9)
 > **Del** (delta_663)
