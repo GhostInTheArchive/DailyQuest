@@ -75,7 +75,7 @@ This file stores each player's daily quest assignment and progress.
 Do not edit `quest_player.json` unless you know exactly what you are doing.
 
 ## Credits
-- **Objit** for the original code that inspired this mod.
+- **Odjit** for the original code that inspired this mod.
 - **V Rising modding community**
 
 ## License
