@@ -64,11 +64,14 @@ internal static class QuestKillHookDeathEventListenerSystem
         {
             var em = __instance.EntityManager;
 
+            /*
             var q = em.CreateEntityQuery(ComponentType.ReadOnly<DeathEvent>());
             if (q.CalculateEntityCount() == 0)
                 return;
+            */
 
-            var events = q.ToComponentDataArray<DeathEvent>(Allocator.Temp);
+            // Use existing system query when an equivalent is available.
+            var events = __instance._DeathEventQuery.ToComponentDataArray<DeathEvent>(Allocator.Temp);
 
             try
             {
@@ -77,7 +80,7 @@ internal static class QuestKillHookDeathEventListenerSystem
                     var ev = events[i];
 
                     var died = ev.Died;
-                    if (died == Entity.Null || !em.Exists(died))
+                    if (died == Entity.Null || !__instance.Exists(died))
                         continue;
 
                     if (died.Has<PlayerCharacter>())
@@ -99,7 +102,7 @@ internal static class QuestKillHookDeathEventListenerSystem
             }
             finally
             {
-                events.Dispose();
+                if (events.IsCreated) events.Dispose();
                 QuestService.Tick();
             }
         }
