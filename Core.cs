@@ -64,6 +64,9 @@ internal static class Core
 
         QuestService.Initialize();
 
+        if (!WebhookService.Reload(out var webhookError))
+            Log.LogWarning($"Failed to load webhook_config.json: {webhookError}");
+
         _hasInitialized = true;
         Log.LogInfo($"{nameof(InitializeAfterLoaded)} completed");
     }
