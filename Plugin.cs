@@ -30,6 +30,7 @@ public class Plugin : BasePlugin
         try
         {
             QuestService.EnsureFilesExist();
+            WebhookService.EnsureFilesExist();
             Log.LogInfo("DailyQuest config files ensured.");
         }
         catch (System.Exception e)
