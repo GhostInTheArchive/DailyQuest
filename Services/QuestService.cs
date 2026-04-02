@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Threading.Tasks;
 using ProjectM;
 using ProjectM.Network;
 using Stunlock.Core;
@@ -12,10 +12,11 @@ using Unity.Entities;
 using UnityEngine;
 using VampireCommandFramework;
 using Unity.Collections;
+using DailyQuest.Models;
 
 namespace DailyQuest.Services;
 
-internal static class QuestService
+internal static partial class QuestService
 {
     private static readonly string CONFIG_DIR = Path.Combine(BepInEx.Paths.ConfigPath, MyPluginInfo.PLUGIN_NAME);
     private static readonly string CONFIG_FILE = Path.Combine(CONFIG_DIR, "quest_config.json");
@@ -46,31 +47,6 @@ internal static class QuestService
         ReadCommentHandling = JsonCommentHandling.Skip,
         PropertyNameCaseInsensitive = true
     };
-
-    public static void EnsureFilesExist()
-    {
-        try
-        {
-            Directory.CreateDirectory(CONFIG_DIR);
-
-            if (!File.Exists(CONFIG_FILE))
-            {
-                var sample = CreateDefaultConfig();
-                File.WriteAllText(CONFIG_FILE, JsonSerializer.Serialize(sample, JsonOpts));
-                Core.Log.LogInfo($"[Quest] Created config: {CONFIG_FILE}");
-            }
-
-            if (!File.Exists(PLAYER_FILE))
-            {
-                File.WriteAllText(PLAYER_FILE, "{}");
-                Core.Log.LogInfo($"[Quest] Created player data: {PLAYER_FILE}");
-            }
-        }
-        catch (Exception e)
-        {
-            Core.LogException(e);
-        }
-    }
 
     public static void Initialize()
     {
@@ -200,74 +176,6 @@ internal static class QuestService
         }
     }
 
-    public static string BuildStatusText(ulong sid, string playerName)
-    {
-        EnsureAssignedForToday(sid, playerName);
-
-        lock (_lock)
-        {
-            var key = sid.ToString();
-            if (!_players.TryGetValue(key, out var st) || st == null)
-                return "<color=red>No data.</color>";
-
-            var easyQuest = GetQuestById_NoLock(st.EasyQuestId);
-            var mediumQuest = GetQuestById_NoLock(st.MediumQuestId);
-            var hardQuest = GetQuestById_NoLock(st.HardQuestId);
-
-            string easyBlock = BuildQuestBlock_NoLock("1", easyQuest, st.EasyProgress, st.EasyClaimed);
-            string mediumBlock = BuildQuestBlock_NoLock("2", mediumQuest, st.MediumProgress, st.MediumClaimed);
-            string hardBlock = BuildQuestBlock_NoLock("3", hardQuest, st.HardProgress, st.HardClaimed);
-
-            return
-                $"<color=yellow>Daily Quests (Reset in {GetNextResetText()})</color>\n" +
-                easyBlock + "\n\n" +
-                mediumBlock + "\n\n" +
-                hardBlock + "\n";
-        }
-    }
-
-    public static string BuildPlayerStatusTextByName(string playerName)
-    {
-        if (string.IsNullOrWhiteSpace(playerName))
-            return "<color=red>Invalid player name.</color>";
-
-        lock (_lock)
-        {
-            EnsureInitialized_NoLock();
-
-            var st = _players.Values.FirstOrDefault(x =>
-                x != null &&
-                !string.IsNullOrWhiteSpace(x.Name) &&
-                string.Equals(x.Name, playerName, StringComparison.OrdinalIgnoreCase));
-
-            if (st == null)
-                return $"<color=red>Player not found in quest data.</color>";
-
-            var easyQuest = GetQuestById_NoLock(st.EasyQuestId);
-            var mediumQuest = GetQuestById_NoLock(st.MediumQuestId);
-            var hardQuest = GetQuestById_NoLock(st.HardQuestId);
-
-            string easyBlock = BuildAdminQuestLine_NoLock("1", easyQuest, st.EasyProgress, st.EasyClaimed);
-            string mediumBlock = BuildAdminQuestLine_NoLock("2", mediumQuest, st.MediumProgress, st.MediumClaimed);
-            string hardBlock = BuildAdminQuestLine_NoLock("3", hardQuest, st.HardProgress, st.HardClaimed);
-
-            string today = DateTime.Now.ToString("yyyy-MM-dd");
-            bool isToday = string.Equals(st.Date, today, StringComparison.Ordinal);
-
-            string header = $"<color=yellow>Daily Quest: <color=white>{st.Name}</color></color>";
-            string dateLine = isToday
-                ? $"<color=#87CEFA>Quest Date</color>: {st.Date}"
-                : $"<color=#87CEFA>Quest Date</color>: {st.Date} (Outdated)";
-
-            return
-                header + "\n" +
-                easyBlock + "\n" +
-                mediumBlock + "\n" +
-                hardBlock + "\n" +
-                dateLine;
-        }
-    }
-
     public static bool TryClaim(ChatCommandContext ctx, ulong sid, string playerName, Entity characterEntity)
     {
         EnsureAssignedForToday(sid, playerName);
@@ -367,7 +275,32 @@ internal static class QuestService
             var fs = new FixedString512Bytes(msg);
             ServerChatUtils.SendSystemMessageToAllClients(Core.EntityManager, ref fs);
 
+            TrySendClaimWebhook(playerName, list);
             return true;
+        }
+    }
+
+    private static void TrySendClaimWebhook(string playerName, string list)
+    {
+        string message = $"**[Daily quest]** - **{playerName}** has completed and claimed the rewards for {list}";
+        _ = SendClaimWebhookAsync(message);
+    }
+
+    private static async Task SendClaimWebhookAsync(string message)
+    {
+        try
+        {
+            var (ok, error) = await WebhookService.SendAsync(message).ConfigureAwait(false);
+            if (!ok && !string.IsNullOrWhiteSpace(error) &&
+                !string.Equals(error, "Webhook is disabled.", StringComparison.Ordinal) &&
+                !string.Equals(error, "Webhook URL is empty.", StringComparison.Ordinal))
+            {
+                Core.Log.LogWarning($"[Webhook] {error}");
+            }
+        }
+        catch (Exception e)
+        {
+            Core.LogException(e);
         }
     }
 
@@ -521,69 +454,6 @@ internal static class QuestService
         return true;
     }
 
-    private static string BuildQuestBlock_NoLock(string label, QuestDef quest, int progress, bool claimed)
-    {
-        if (quest == null)
-            return $"<color=#87CEFA>Quest {label}</color>: <color=yellow>No quest {label.ToLowerInvariant()} configured.</color>";
-
-        int need = Math.Max(0, quest.RequiredKills);
-        int prog = Math.Max(0, progress);
-        if (prog > need) prog = need;
-
-        string rewardText = GetRewardDisplay_NoLock(quest);
-
-        bool done = need > 0 && prog >= need;
-        string statusText = done
-            ? (claimed
-                ? "Reward claimed"
-                : "Completed! Claim with <color=green>.quest reward</color>")
-            : $"Progress {prog}/{need}";
-
-        return
-            $"<color=#87CEFA>Quest {label}</color>: {quest.Name} x{need}\n" +
-            $"Reward: {rewardText}\n" +
-            $"Status: {statusText}";
-    }
-
-    private static string BuildAdminQuestLine_NoLock(string label, QuestDef quest, int progress, bool claimed)
-    {
-        if (quest == null)
-            return $"<color=#87CEFA>Quest {label}</color>: <color=yellow>No quest configured.</color>";
-
-        int need = Math.Max(0, quest.RequiredKills);
-        int prog = Math.Max(0, progress);
-        if (prog > need) prog = need;
-
-        string status = claimed
-            ? "(Reward claimed)"
-            : prog >= need
-                ? "(Completed)"
-                : $"({prog}/{need})";
-
-        string questName = string.IsNullOrWhiteSpace(quest.Name) ? $"Quest {label}" : quest.Name;
-
-        return $"<color=#87CEFA>Quest {label}</color>: {questName} {status}";
-    }
-
-    private static void SendQuestToast(User user, string label, string questName, int prog, int need, bool done)
-    {
-        if (user == default || !user.IsConnected)
-            return;
-
-        if (need < 0) need = 0;
-        if (prog < 0) prog = 0;
-        if (prog > need) prog = need;
-
-        string status = done
-            ? $"<color=green>{prog}/{need}</color>, Claim: <color=green>.quest reward</color>"
-            : $"<color=yellow>{prog}/{need}</color>, Details: <color=green>.quest daily</color>";
-
-        string msg = $"<color=#87CEFA>Quest {label}</color>: <color=white>{questName}</color> {status}";
-
-        var fs = new FixedString512Bytes(msg);
-        ServerChatUtils.SendSystemMessageToClient(Core.EntityManager, user, ref fs);
-    }
-
     private static void RollDateIfNeeded_NoLock()
     {
         var nowDate = DateTime.Now.Date;
@@ -627,30 +497,6 @@ internal static class QuestService
         var rnd = new System.Random(seed);
         var pick = pool[rnd.Next(pool.Count)];
         return pick?.Id ?? "";
-    }
-
-    private static string GetRewardDisplay_NoLock(QuestDef quest)
-    {
-        if (quest?.Reward == null) return "None";
-
-        string name = quest.Reward.Name ?? "";
-        int amount = quest.Reward.Amount;
-
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            int prefab = quest.Reward.Prefab;
-            if (prefab != 0)
-            {
-                try { name = new PrefabGUID(prefab).LookupName(); }
-                catch { name = prefab.ToString(); }
-            }
-            else
-            {
-                name = "Unknown";
-            }
-        }
-
-        return $"{Math.Max(0, amount)}x {name}";
     }
 
     private static bool TryResolveRewardPrefab_NoLock(QuestDef quest, out PrefabGUID rewardPrefab, out string rewardName)
@@ -713,249 +559,5 @@ internal static class QuestService
 
             yield return new WaitForSeconds(1f);
         }
-    }
-
-    private static void RebuildQuestIndex_NoLock()
-    {
-        _questsById = new Dictionary<string, QuestDef>(StringComparer.Ordinal);
-        _enabledQuests = new List<QuestDef>();
-        _enabledEasyQuests = new List<QuestDef>();
-        _enabledMediumQuests = new List<QuestDef>();
-        _enabledHardQuests = new List<QuestDef>();
-
-        if (_config?.Quests == null)
-        {
-            Core.Log.LogWarning("[Quest] _config.Quests is null");
-            return;
-        }
-
-        foreach (var q in _config.Quests)
-        {
-            if (q == null) continue;
-
-            if (!string.IsNullOrWhiteSpace(q.Id))
-                _questsById[q.Id] = q;
-
-            _enabledQuests.Add(q);
-
-            var diff = (q.Difficulty ?? "easy").Trim().ToLowerInvariant();
-            if (diff == "hard")
-                _enabledHardQuests.Add(q);
-            else if (diff == "medium")
-                _enabledMediumQuests.Add(q);
-            else
-                _enabledEasyQuests.Add(q);
-        }
-
-        Core.Log.LogInfo($"[Quest] Loaded quests: all {_enabledQuests.Count}, easy {_enabledEasyQuests.Count}, medium {_enabledMediumQuests.Count}, hard {_enabledHardQuests.Count}");
-    }
-
-    private static void LoadConfig_NoLock(bool createIfMissing)
-    {
-        Directory.CreateDirectory(CONFIG_DIR);
-
-        if (!File.Exists(CONFIG_FILE))
-        {
-            if (!createIfMissing)
-            {
-                Core.Log.LogWarning($"[Quest] Config not found: {CONFIG_FILE}");
-                _config = new QuestConfig();
-                RebuildQuestIndex_NoLock();
-                return;
-            }
-
-            var sample = CreateDefaultConfig();
-            File.WriteAllText(CONFIG_FILE, JsonSerializer.Serialize(sample, JsonOpts));
-            Core.Log.LogInfo($"[Quest] Created config: {CONFIG_FILE}");
-        }
-
-        try
-        {
-            var json = File.ReadAllText(CONFIG_FILE);
-            _config = JsonSerializer.Deserialize<QuestConfig>(json, JsonOpts) ?? new QuestConfig();
-            _config.Quests ??= new List<QuestDef>();
-            RebuildQuestIndex_NoLock();
-        }
-        catch (Exception e)
-        {
-            Core.LogException(e);
-            _config = new QuestConfig();
-            RebuildQuestIndex_NoLock();
-        }
-    }
-
-    private static void LoadPlayers_NoLock()
-    {
-        try
-        {
-            if (!File.Exists(PLAYER_FILE))
-            {
-                _players = new Dictionary<string, PlayerQuestState>();
-                return;
-            }
-
-            string json = File.ReadAllText(PLAYER_FILE);
-            if (string.IsNullOrWhiteSpace(json))
-            {
-                _players = new Dictionary<string, PlayerQuestState>();
-                return;
-            }
-
-            _players = JsonSerializer.Deserialize<Dictionary<string, PlayerQuestState>>(json, JsonOpts)
-                       ?? new Dictionary<string, PlayerQuestState>();
-        }
-        catch (Exception e)
-        {
-            Core.LogException(e);
-            _players = new Dictionary<string, PlayerQuestState>();
-        }
-    }
-
-    private static void SavePlayers_NoLock()
-    {
-        try
-        {
-            Directory.CreateDirectory(CONFIG_DIR);
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(_players, JsonOpts);
-            File.WriteAllBytes(PLAYER_FILE, bytes);
-        }
-        catch (Exception e)
-        {
-            Core.LogException(e);
-        }
-    }
-
-    private static QuestConfig CreateDefaultConfig()
-    {
-        return new QuestConfig
-        {
-            RepairOnClaim = false,
-            Quests = new List<QuestDef>
-            {
-                new QuestDef
-                {
-                    Id = "1_1",
-                    Name = "Kill Wolves",
-                    Difficulty = "easy",
-                    TargetPrefabs = new[] { -1418430647, -1554428547, -578677530, 134039094, -218175217, 572729167, 616274140 },
-                    RequiredKills = 10,
-                    Reward = new RewardDef
-                    {
-                        Prefab = 2103989354,
-                        Name = "Stygian Shards",
-                        Amount = 300
-                    }
-                },
-                new QuestDef
-                {
-                    Id = "2_1",
-                    Name = "Kill Knights",
-                    Difficulty = "medium",
-                    TargetPrefabs = new[] { -930333806, 794228023 },
-                    RequiredKills = 10,
-                    Reward = new RewardDef
-                    {
-                        Prefab = 576389135,
-                        Name = "Greater Stygian Shards",
-                        Amount = 400
-                    }
-                },
-                new QuestDef
-                {
-                    Id = "3_1",
-                    Name = "Defeat Dracula",
-                    Difficulty = "hard",
-                    TargetPrefabs = new[] { -327335305 },
-                    RequiredKills = 3,
-                    Reward = new RewardDef
-                    {
-                        Prefab = 28358550,
-                        Name = "Primal Stygian Shards",
-                        Amount = 500
-                    }
-                }
-            }
-        };
-    }
-
-    private sealed class QuestConfig
-    {
-        [JsonPropertyName("GearRepairOnClaim")]
-        public bool RepairOnClaim { get; set; } = false;
-
-        [JsonPropertyName("Quests")]
-        public List<QuestDef> Quests { get; set; } = new();
-    }
-
-    private sealed class QuestDef
-    {
-        [JsonPropertyName("ID")]
-        public string Id { get; set; }
-
-        [JsonPropertyName("Name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("Difficulty")]
-        public string Difficulty { get; set; } = "easy";
-
-        [JsonPropertyName("TargetPrefabs")]
-        public int[] TargetPrefabs { get; set; } = Array.Empty<int>();
-
-        [JsonPropertyName("RequiredKills")]
-        public int RequiredKills { get; set; }
-
-        [JsonPropertyName("Reward")]
-        public RewardDef Reward { get; set; }
-    }
-
-    private sealed class RewardDef
-    {
-        [JsonPropertyName("Prefab")]
-        public int Prefab { get; set; }
-
-        [JsonPropertyName("Name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("Amount")]
-        public int Amount { get; set; }
-    }
-
-    private sealed class PlayerQuestState
-    {
-        [JsonPropertyName("SteamID")]
-        public ulong SteamId { get; set; }
-
-        [JsonPropertyName("Name")]
-        public string Name { get; set; }
-
-        [JsonPropertyName("Date")]
-        public string Date { get; set; }
-
-        [JsonPropertyName("EasyQuestId")]
-        public string EasyQuestId { get; set; }
-
-        [JsonPropertyName("EasyProgress")]
-        public int EasyProgress { get; set; }
-
-        [JsonPropertyName("EasyClaimed")]
-        public bool EasyClaimed { get; set; }
-
-        [JsonPropertyName("MediumQuestId")]
-        public string MediumQuestId { get; set; }
-
-        [JsonPropertyName("MediumProgress")]
-        public int MediumProgress { get; set; }
-
-        [JsonPropertyName("MediumClaimed")]
-        public bool MediumClaimed { get; set; }
-
-        [JsonPropertyName("HardQuestId")]
-        public string HardQuestId { get; set; }
-
-        [JsonPropertyName("HardProgress")]
-        public int HardProgress { get; set; }
-
-        [JsonPropertyName("HardClaimed")]
-        public bool HardClaimed { get; set; }
     }
 }
