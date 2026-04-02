@@ -2,6 +2,16 @@
 
 DailyQuest is a **server-side** V Rising mod that gives each player **three rotating daily kill quests**.
 
+## Latest Update
+- Default quest configuration for new installations.
+  - Added a default configuration with 116 quests for new installations.
+  - If you have already installed DailyQuest and configured `quest_config.json`, you can continue using it as usual.
+  - If you have already installed DailyQuest and want to use the default configuration, delete `quest_config.json` and `quest_player.json`, then restart the server.
+  - You can edit `quest_config.json` after it has been generated from the default configuration.
+- Discord webhook notifications.
+  - DailyQuest now supports Discord webhook notifications when players claim quest rewards.
+  - You can configure the webhook in `webhook_config.json`.
+
 ## Features
 - Assigns **3 daily quests** to each player every day:
   - **Quest 1 (Easy)**
@@ -16,6 +26,7 @@ DailyQuest is a **server-side** V Rising mod that gives each player **three rota
   - Quest 1 reward: repairs **amulet** in the character's equipment slots (excluding Soul Shards)
   - Quest 2 reward: repairs **armor** in the character's equipment slots
   - Quest 3 reward: repairs **weapons** in the character's equipment slots
+- Supports **optional Discord notifications on claim**
 
 ## Requirements
 1. [BepInEx 1.733.2](https://thunderstore.io/c/v-rising/p/BepInEx/BepInExPack_V_Rising/) 
@@ -55,27 +66,53 @@ DailyQuest is a **server-side** V Rising mod that gives each player **three rota
   - Reload quest_config.json
   - Shortcut: *.quest rl*
 
+- `.questhook on`
+  - Enable DailyQuest webhook sending.
+  - Shortcut: *.qh on*
+
+- `.questhook off`
+  - Disable DailyQuest webhook sending.
+  - Shortcut: *.qh off*
+
+- `.questhook reload`
+  - Reload webhook_config.json
+  - Shortcut: *.qh rl*
+
+- `.questhook test`
+  - Send a test message to Discord.
+  - Shortcut: *.qh t*
+
 ## Config Files
 
 After the first server start, the following files will be created:
 - `BepInEx/config/DailyQuest/quest_config.json`
 - `BepInEx/config/DailyQuest/quest_player.json`
+- `BepInEx/config/DailyQuest/webhook_config.json`
 
 ### quest_config.json
-This file defines:
-- whether gear repair is enabled when rewards are claimed
-- which quests are available
-- required kill amounts
-- target prefab IDs
-- reward items and amounts
-- [Sample daily quests from my server](https://docs.google.com/spreadsheets/d/1hFdY5FR3PcHFJUyLiL4qcRrRfmHRlvD9xCdu-Tjfy7o/edit?gid=214678967#gid=214678967)
+This file contains the main DailyQuest settings and quest definitions.
+- `GearRepairOnClaim`: whether gear repair is enabled when rewards are claimed.
+- `Quests`: the list of available quests.
+- `ID`: the unique ID of the quest.
+- `Name`: the name of the quest.
+- `Difficulty`: the quest difficulty (`easy` = Quest 1, `medium` = Quest 2, `hard` = Quest 3).
+- `TargetPrefabs`: the target prefab IDs for the quest.
+- `RequiredKills`: the number of kills required to complete the quest.
+- `Reward.Prefab`: the reward prefab ID.
+- `Reward.Name`: the display name of the reward.
+- `Reward.Amount`: the reward amount.
 
 ### quest_player.json
-This file stores each player's daily quest assignment and progress.
-Do not edit `quest_player.json` unless you know exactly what you are doing.
+This file stores each player's daily quest assignments and progress.
+- Do not edit `quest_player.json` unless you know exactly what you are doing.
+
+### webhook_config.json
+This file controls the optional DailyQuest Discord webhook.
+- `enabled`: enables or disables webhook sending.
+- `webhookUrl`: your Discord webhook URL.
 
 ## Credits
-- **Odjit** for the original code that inspired this mod.
+- **odjit** and **zfolmt** for the original code and assistance with this mod.
 - **V Rising modding community**
 
 ## License
