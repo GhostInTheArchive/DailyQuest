@@ -2,7 +2,7 @@
   "name": "DailyQuest",
   "version_number": "1.0.4",
   "website_url": "https://github.com/delta663/DailyQuest",
-  "description": "Daily quest system for V Rising with three rotating quest tiers, reward claiming, and optional gear repair.",
+  "description": "Daily quest system for V Rising with three rotating quest tiers, reward claiming, optional gear repair, and Discord webhook notifications.",
   "dependencies": [
     "BepInEx-BepInExPack_V_Rising-1.733.2",
     "deca-VampireCommandFramework-0.10.4"
